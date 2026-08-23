@@ -2,7 +2,7 @@ from kafka import KafkaConsumer
 import json
 import pandas as pd
 
-TARGET_COUNT = 500
+TARGET_COUNT = 15000
 
 consumer = KafkaConsumer(
     'raw-trades',
