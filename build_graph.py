@@ -17,7 +17,7 @@ edge_index = torch.tensor([source_nodes, target_nodes], dtype=torch.long)
 edge_features = torch.tensor(df[['price', 'volume']].values, dtype=torch.float)
 edge_labels = torch.tensor(df['is_fraud'].astype(int).values, dtype=torch.long)
 
-# Node features - fraud_ratio REMOVED to avoid label leakage
+
 node_features_list = []
 for trader in all_traders:
     as_trader = df[df['trader_id'] == trader]
@@ -33,14 +33,13 @@ for trader in all_traders:
     ]).unique()
     unique_counterparties = len(counterparties)
 
-    # NEW: volume std deviation - captures "inconsistency" in trade sizes
-    # without directly leaking fraud labels
+ 
     volume_std = all_involved['volume'].std() if total_trades > 1 else 0
 
     node_features_list.append([total_trades, avg_volume, avg_price, unique_counterparties, volume_std])
 
 node_features = torch.tensor(node_features_list, dtype=torch.float)
-node_features = torch.nan_to_num(node_features, nan=0.0)  # handle any NaN from single-trade traders
+node_features = torch.nan_to_num(node_features, nan=0.0)  
 
 print(f"\nnode_features shape: {node_features.shape}")
 print(f"Example - first trader's features: {node_features[0]}")
