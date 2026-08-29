@@ -2,6 +2,7 @@ from kafka import KafkaConsumer
 import json
 import torch
 import pandas as pd
+import psycopg2
 from collections import deque
 from datetime import datetime, UTC
 from torch_geometric.data import Data
@@ -18,8 +19,32 @@ model.load_state_dict(torch.load('fraud_gnn_windowed.pt', weights_only=True))
 model.eval()
 print("Loaded trained GNN model.")
 
+# Database connection
+db_conn = psycopg2.connect(
+    host="localhost", port=5432, dbname="quantumledger",
+    user="quantumledger", password="quantumledger_dev"
+)
+db_conn.autocommit = True
+db_cur = db_conn.cursor()
+print("Connected to database.")
+
 trade_history = deque(maxlen=HISTORY_SIZE)
 results_log = []
+
+def save_trade_to_db(trade):
+    db_cur.execute("""
+        INSERT INTO trades (trade_id, trader_id, counterparty_id, price, volume, timestamp, is_fraud_actual, fraud_type)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (trade['trade_id'], trade['trader_id'], trade['counterparty_id'],
+          trade['price'], trade['volume'], trade['timestamp'],
+          trade['is_fraud'], trade['fraud_type']))
+
+def save_alert_to_db(trade, predicted_fraud, confidence):
+    db_cur.execute("""
+        INSERT INTO fraud_alerts (trade_id, trader_id, counterparty_id, volume, predicted_fraud, confidence)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (trade['trade_id'], trade['trader_id'], trade['counterparty_id'],
+          trade['volume'], predicted_fraud, confidence))
 
 def build_live_graph(trades):
     df = pd.DataFrame(trades)
@@ -93,6 +118,9 @@ try:
         trade_history.append(trade)
         trade_count += 1
 
+        # Save every trade to the database as it arrives
+        save_trade_to_db(trade)
+
         if trade_count % GRAPH_REBUILD_INTERVAL == 0 and len(trade_history) >= 10:
             current_graph, current_df, trader_map = build_live_graph(list(trade_history))
             with torch.no_grad():
@@ -111,6 +139,9 @@ try:
 
                 results_log.append({'pred': pred_label, 'actual': actual_label})
 
+                # Save every prediction as an alert record
+                save_alert_to_db(row, bool(pred_label), prob.item())
+
                 if pred_label == 1 and actual_label == 1:
                     print(f"FRAUD FLAGGED | {row['trader_id']} -> {row['counterparty_id']} | vol={row['volume']} | confidence={prob.item():.2f} | CORRECT")
                 elif pred_label == 1 and actual_label == 0:
@@ -124,3 +155,5 @@ try:
 except KeyboardInterrupt:
     print("\n\nStopped by user.")
     print_summary()
+    db_cur.close()
+    db_conn.close()
