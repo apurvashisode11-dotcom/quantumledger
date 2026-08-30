@@ -9,8 +9,16 @@ from contextlib import contextmanager
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import json
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="QuantumLedger API")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DB_CONFIG = {
     "host": "localhost",
@@ -20,8 +28,7 @@ DB_CONFIG = {
     "password": "quantumledger_dev",
 }
 
-# minconn=2, maxconn=10 — small pool is plenty for a solo/demo project;
-# tune maxconn up only if you actually see "pool exhausted" errors under load
+
 connection_pool = psycopg2.pool.SimpleConnectionPool(
     minconn=2,
     maxconn=10,
@@ -43,11 +50,11 @@ def root():
     return {"status": "ok", "service": "QuantumLedger API"}
 
 
-# ---------- Response models ----------
+
 
 class Trade(BaseModel):
     id: int
-    trade_id: str
+    trade_id: int
     trader_id: str
     counterparty_id: str
     price: float
@@ -58,7 +65,7 @@ class Trade(BaseModel):
 
 class Alert(BaseModel):
     id: int
-    trade_id: str
+    trade_id: int
     trader_id: str
     counterparty_id: str
     volume: float
